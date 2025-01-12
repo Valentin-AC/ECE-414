@@ -5,6 +5,7 @@ import cv2
 #pip install cv2
 #also, add directory for each to PATH (have to figure out how to do this myself)
 
+
 webcam_capture = cv2.VideoCapture(0)
 
 while True:
@@ -15,3 +16,4 @@ while True:
 
 webcam_capture.release()
 cv2.destroyAllWindows()
+
