@@ -101,14 +101,17 @@ def main():
 
             frame = detector.findFingers(frame)
             lmsList = detector.findPosition(frame)
-            if len(lmsList)!=0:
-                print(lmsList[0])
+            #if len(lmsList)!=0:
+                #print(lmsList[0])
 
             ctime = time.time()
             fps =1/(ctime-ptime)
             ptime = ctime
 
             cv2.putText(frame, str(int(fps)), (10,70), cv2.FONT_HERSHEY_PLAIN,3,(255,0,255),3)
+
+            if cv2.waitKey(1) == ord('x'):
+                break
  
     #gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             cv2.imshow('frame', frame)
