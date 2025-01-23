@@ -5,12 +5,12 @@ import math as math
 
 
 class HandTrackingDynamic:
-    def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):
-        self.__mode__   =  mode
+    def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):     #custom constructor made for objects of the HandTrackingDynamic class. The four parameters are attributes which are set to defaults as shown within the parantheses. 
+        self.__mode__   =  mode                                                     #these four attributes are created either by the defaults described above or by manual assignment
         self.__maxHands__   =  maxHands
         self.__detectionCon__   =   detectionCon
-        self.__trackCon__   =   trackCon
-        self.handsMp = mp.solutions.hands
+        self.__trackCon__   =   trackCon                 
+        self.handsMp = mp.solutions.hands                                           #these four come from the mediapipe library mostly. As a reminder, the mediapipe library is a pre-trained computer vision AI model. 
         self.hands = self.handsMp.Hands()
         self.mpDraw= mp.solutions.drawing_utils
         self.tipIds = [4, 8, 12, 16, 20]
