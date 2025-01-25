@@ -1,0 +1,7 @@
+wrist1 = detected_image.multi_hand_landmarks[1].
+
+
+                    lm_dict["landmark_{0}_x".format(landmark)] = lm_list[landmark].x
+                    lm_dict["landmark_{0}_y".format(landmark)] = lm_list[landmark].y
+                    lm_dict["landmark_{0}_z".format(landmark)] = lm_list[landmark].z
+                    #does the same as first one, but adding in each of the individual components. 
