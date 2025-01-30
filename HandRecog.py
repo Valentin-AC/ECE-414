@@ -5,15 +5,16 @@ import math as math
 
 
 class HandTrackingDynamic:
-    def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):     #custom constructor made for objects of the HandTrackingDynamic class. The four parameters are attributes which are set to defaults as shown within the parantheses. 
-        self.__mode__   =  mode                                                     #these four attributes are created either by the defaults described above or by manual assignment
-        self.__maxHands__   =  maxHands
+    def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):     # custom constructor made for objects of the HandTrackingDynamic class. The four parameters are attributes which are set to defaults as shown within the parantheses. 
+        self.__mode__   =  mode                                                     # these four attributes are created either by the defaults described above or by manual assignment.
+        self.__maxHands__   =  maxHands                                             # the fact that the self.(attribute) isn't exactly the same as the atrribute name (given the underscores) tells us that these are just ways to access the attributes. 
         self.__detectionCon__   =   detectionCon
-        self.__trackCon__   =   trackCon                 
-        self.handsMp = mp.solutions.hands                                           #these four come from the mediapipe library mostly. As a reminder, the mediapipe library is a pre-trained computer vision AI model. 
+        self.__trackCon__   =   trackCon      
+        self.tipIds = [4, 8, 12, 16, 20]                                            # this attribute serves to tell us which landmarks are the finger tips. 
+        self.handsMp = mp.solutions.hands                                           # these three come from the mediapipe library mostly. As a reminder, the mediapipe library is a pre-trained computer vision AI model. 
         self.hands = self.handsMp.Hands()
         self.mpDraw= mp.solutions.drawing_utils
-        self.tipIds = [4, 8, 12, 16, 20]
+       
 
     def findFingers(self, frame, draw=True):
         imgRGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -45,8 +46,8 @@ class HandTrackingDynamic:
             xmin, xmax = min(xList), max(xList)
             ymin, ymax = min(yList), max(yList)
             bbox = xmin, ymin, xmax, ymax
-            print( "Hands Keypoint")
-            print(bbox)
+            #print( "Hands Keypoint")
+            #print(bbox)
             if draw:
                 cv2.rectangle(frame, (xmin - 20, ymin - 20),(xmax + 20, ymax + 20),
                                (0, 255 , 0) , 2)
@@ -101,17 +102,21 @@ def main():
 
             frame = detector.findFingers(frame)
             lmsList = detector.findPosition(frame)
-            #if len(lmsList)!=0:
-                #print(lmsList[0])
+
+                                                #note that the findDistance and findFingersUp methods are not used in the main function. 
+            if len(lmsList)!=0:
+                print(lmsList[0])
 
             ctime = time.time()
-            fps =1/(ctime-ptime)
+            fps = 1/(ctime-ptime)
             ptime = ctime
 
             cv2.putText(frame, str(int(fps)), (10,70), cv2.FONT_HERSHEY_PLAIN,3,(255,0,255),3)
+                                                #places the FPS counter on screen. 
 
             if cv2.waitKey(1) == ord('x'):
                 break
+                                                #break condition
  
     #gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             cv2.imshow('frame', frame)
