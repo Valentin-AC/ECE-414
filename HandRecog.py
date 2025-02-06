@@ -87,20 +87,27 @@ class HandTrackingDynamic:
         return self.lmsList, bbox
     
 
-    def findDistance(self, p1, p2, frame, draw= True, r=15, t=3):
+    def findDistanceXY(self, p1, p2, frame, draw= True, r=5, t=3):
          
-        x1 , y1 = self.lmsList[p1][1:]
-        x2, y2 = self.lmsList[p2][1:]
-        cx , cy = (x1+x2)//2 , (y1 + y2)//2
+        x1 , y1 = self.lmsList[p1][1:3]
+        #Assigns the x and y coords of the first target landmart to x1 and y1. 
+        x2, y2 = self.lmsList[p2][1:3]
+        #Assigns the x and y coords of the second  target landmart to x2 and y4. 
+        xMid , yMid = (x1+x2)//2 , (y1 + y2)//2
+        #Finds midpoint components. 
 
         if draw:
-              cv2.line(frame,(x1, y1),(x2,y2) ,(255,0,255), t)
-              cv2.circle(frame,(x1,y1),r,(255,0,255),cv2.FILLED)
-              cv2.circle(frame,(x2,y2),r, (255,0,0),cv2.FILLED)
-              cv2.circle(frame,(cx,cy), r,(0,0.255),cv2.FILLED)
+              cv2.line(frame,(x1, y1),(x2,y2) ,(50,255,50), t)
+                #Draws line between target landmarks.
+              cv2.circle(frame,(x1,y1),r,(255,0,135),cv2.FILLED)
+              cv2.circle(frame,(x2,y2),r, (255,0,135),cv2.FILLED)
+              cv2.circle(frame,(xMid,yMid), int(r*0.65) ,(255,0,135),cv2.FILLED)
+                #Draws circles on each target landmark + midpoint. Made midpoint circle smaller. 
+                    #74,26,181 is a rose red color in case you want to use that. 
         len= math.hypot(x2-x1,y2-y1)
+            #finds distance between target landmarks. 
 
-        return len, frame , [x1, y1, x2, y2, cx, cy]
+        return len, [x1, y1, x2, y2, xMid, yMid]
     
     
     def findFingerUp(self):
@@ -133,6 +140,7 @@ class HandTrackingDynamic:
             handMsg = "closed"
             #Regardless of thumb, if the four fingers of a hand are down, hand is closed. 
             #Remember, count starts from 0. 
+            #Also, remember that index ranges are exclusive on the end index. 
         else: 
             if 0 < sum(fingers[0:5]) < 5:
                 handMsg = "partially open"
@@ -170,15 +178,16 @@ def main():
             if len(lmsList[0]) != 0:
                 # This if statement is necessary because without it, the program kills itself when your hand isn't on screen lol. 
                 fingers, handMsg, handClosed = detector.findFingerUp()
-                print("Fingers Up: ", fingers, (sum(fingers[0:5])))
+                distance, info = detector.findDistanceXY(4, 8, frame)
+                print("Fingers Up: ", fingers, (sum(fingers[0:5])), "  ", distance)
                     # Output finger states to console
                 
                 cv2.putText(frame, ("Hand is " + handMsg), (5,80), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
                 #On-screen hand status. 
 
-            #frame = detector.findDistance(1,2,frame)
+            #frame = detector.findDistanceXY(1,2,frame)
 
-            #note that the findDistance method are not used in the main function
+            #note that the findDistanceXY method are not used in the main function
             
             #if len(lmsList)!=0:
                 #print(lmsList[0])
