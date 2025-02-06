@@ -38,9 +38,18 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) a
                 # Ex: lm_list.landmark[0].x returns the x compnent of the first landmark, which happens to be the wrist. 
                 # The z component also exists, potentially no need for a second camera? 
 
-                print(lm_list.landmark[0].z * 1e07)
-                # insert algorithm to be used on each hand here. Interconnect with wireless tranmission protocool. 
-                
+                #print(lm_list.landmark[0].z)
+        
+        hands_list_metric = detected_image.multi_hand_world_landmarks
+        if hands_list_metric:
+            for lm_list_metric in hands_list_metric:
+                print(lm_list_metric.landmark[4].x) 
+
+                    # Similar algorithm as above, main difference is that metric is used. 
+                    # insert algorithm to be used on each hand here? Interconnect with wireless tranmission protocool. 
+
+
+
 
         cv2.imshow('Webcam', image)
   
