@@ -87,10 +87,26 @@ class HandTrackingDynamic:
         return self.lmsList, bbox
     
 
+    def findDistance(self, p1, p2, frame, draw= True, r=15, t=3):
+         
+        x1 , y1 = self.lmsList[p1][1:]
+        x2, y2 = self.lmsList[p2][1:]
+        cx , cy = (x1+x2)//2 , (y1 + y2)//2
+
+        if draw:
+              cv2.line(frame,(x1, y1),(x2,y2) ,(255,0,255), t)
+              cv2.circle(frame,(x1,y1),r,(255,0,255),cv2.FILLED)
+              cv2.circle(frame,(x2,y2),r, (255,0,0),cv2.FILLED)
+              cv2.circle(frame,(cx,cy), r,(0,0.255),cv2.FILLED)
+        len= math.hypot(x2-x1,y2-y1)
+
+        return len, frame , [x1, y1, x2, y2, cx, cy]
+    
+    
     def findFingerUp(self):
         fingers=[]
 
-        if self.lmsList[self.tipIds[0]][1] > self.lmsList[self.tipIds[0]-1][1]:
+        if self.lmsList[self.tipIds[0]][1] > self.lmsList[self.tipIds[0]-2][1]:
                 # Checks whether the thumb tip is to the right (for left-hand tracking) or left (for right-hand tracking) compared to the preceding joint.
                 # This is necessary because the thumb bends sideways (unlike the other fingers, which bend vertically).
             fingers.append(1)
@@ -99,7 +115,7 @@ class HandTrackingDynamic:
             fingers.append(0)
 
         for id in range(1, 5):            
-            if self.lmsList[self.tipIds[id]][2] < self.lmsList[self.tipIds[id]-2][2]:
+            if self.lmsList[self.tipIds[id]][2] < self.lmsList[self.tipIds[id]-3][2]:
                 #The other four fingers (index, middle, ring, pinky) bend vertically, so their conditions compare y-coordinates instead of x-coordinates.
                 #Here, 2 represents the y-coordinate. If the fingertip’s y-coordinate is smaller (higher up), it means the finger is extended.
                    fingers.append(1)
@@ -127,22 +143,6 @@ class HandTrackingDynamic:
         
 
         return fingers, handMsg, handClosed
-
-
-    def findDistance(self, p1, p2, frame, draw= True, r=15, t=3):
-         
-        x1 , y1 = self.lmsList[p1][1:]
-        x2, y2 = self.lmsList[p2][1:]
-        cx , cy = (x1+x2)//2 , (y1 + y2)//2
-
-        if draw:
-              cv2.line(frame,(x1, y1),(x2,y2) ,(255,0,255), t)
-              cv2.circle(frame,(x1,y1),r,(255,0,255),cv2.FILLED)
-              cv2.circle(frame,(x2,y2),r, (255,0,0),cv2.FILLED)
-              cv2.circle(frame,(cx,cy), r,(0,0.255),cv2.FILLED)
-        len= math.hypot(x2-x1,y2-y1)
-
-        return len, frame , [x1, y1, x2, y2, cx, cy]
 
     #Will need to add method for rotation coeffecient here. 
 
