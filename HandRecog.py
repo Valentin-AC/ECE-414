@@ -109,13 +109,20 @@ class HandTrackingDynamic:
 
         return len, [x1, y1, x2, y2, xMid, yMid]
     
+    def findUprightness(self):
+
+        if self.results.multi_hand_landmarks:
+            myHand = self.results.multi_hand_landmarks
+
+        return "test"
     
     def findFingerUp(self):
         fingers=[]
 
         if self.lmsList[self.tipIds[0]][1] > self.lmsList[self.tipIds[0]-2][1]:
-                # Checks whether the thumb tip is to the right (for left-hand tracking) or left (for right-hand tracking) compared to the preceding joint.
+                # Checks whether the thumb tip is to the right (for left-hand tracking) compared to the preceding joint.
                 # This is necessary because the thumb bends sideways (unlike the other fingers, which bend vertically).
+                #NEED TO DEVELOP A WAY TO DISTINGUISH RIGHT FROM LEFT, CAUSE THIS DOESN'T WORK OTHERSWISE. 
             fingers.append(1)
                 #Append 1 to the list of fingers up. 
         else:
@@ -149,10 +156,11 @@ class HandTrackingDynamic:
             handClosed = False
             #regardless of how many fingers are up, if all four aren't down, the hand will be considered closed. 
         
-
         return fingers, handMsg, handClosed
 
-    #Will need to add method for rotation coeffecient here. 
+    def rotation(): 
+         
+        return "test"
 
 
 def main():
