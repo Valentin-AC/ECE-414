@@ -24,14 +24,24 @@ class HandTrackingDynamic:
         self.mpDraw= mp.solutions.drawing_utils
             # these three come from the mediapipe library mostly. As a reminder, the mediapipe library is a pre-trained computer vision AI model. 
 
-       
+    # A quick note about the coordinate system: (0,0) is intially located at the TOP RIGHT of the screen and the x and y values respectively get higher as go to the left and down. 
+    # Not sure why the coordinate system is like this, it just is. 
+    # The flip function applied to the frame in the drawHandLandmarks method below flips the x axis. 
+    # For consistenty and convenience, we will also flip the y axis below to make (0,0 the bottom left)
 
-    def drawHandLandmarks(self, frame, draw=True):
+    def processAndCorrectView(self, frame): 
+
+        frame = cv2.flip(frame, 1)
+            #flips frame to match user's hands.
 
         imgRGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         self.results = self.hands.process(imgRGB)
-        #Changes color scheme, runs the model on the image.
-        # Reasoning for this color switch is that mediapipe uses RGB while cv2 operates on BGR, so you need to change it.   
+            # Changes color scheme, runs the model on the image.
+            # Reasoning for this color switch is that mediapipe uses RGB while cv2 operates on BGR, so you need to change it.
+        
+        return frame
+    
+    def drawHandLandmarks(self, frame, draw=True):  
         
         if self.results.multi_hand_landmarks: 
             # if there is a hand on screen, then...
@@ -42,7 +52,6 @@ class HandTrackingDynamic:
                     # draw the red dots at each knuckle/wrist detected and interconnecting white lines.
 
         return frame
-
 
     def findPosition( self, frame, handNo=0, draw=True):
         xList = []
@@ -60,6 +69,7 @@ class HandTrackingDynamic:
                     # the .shape method from the mediapipe library assigns the height and width of the screen, in pixels. c is color channel. 
                 cx, cy = int(lm.x * w), int(lm.y * h)
                     # the range of the coordinate values of each landmark gets converted into the possible range of pixel values instead of the arbitrary 0-1 range. 
+                
                 z = int(lm.z)
                     # There is no corresponding pixels for z motion, so range stays the default. 
                     # This may change once second camera is implemented. 
@@ -68,13 +78,20 @@ class HandTrackingDynamic:
                 yList.append(cy)
                 zList.append(z)
 
-                self.lmsList.append([id, cx, cy, z])
+                cDrawY = cy
+                #Defines seperate y coordinates specifically for drawing because the flip applied below flips the orientation of drawings.
+
+                cy = int((1 - lm.y) * h) 
+                #Flips the y axis to go from bottom to top as described earlier, causing (0,0) to be at the bottom right.
+                self.lmsList.append([id, cx, cy, z, cDrawY])
+
+                
 
                 if draw:
                     # As shown in paramater declaration above, by default, draw = true. 
-                    cv2.circle(frame,  (cx, cy), 5, (255, 0, 255), cv2.FILLED)
-                        # Draw purple circles on each landmark, overtop the normal red ones.. 
-
+                    cv2.circle(frame,  (cx, cDrawY), 5, (255, 0, 255), cv2.FILLED)
+                        # Draw purple circles on each landmark, overtop the normal red ones.
+                
             xmin, xmax = min(xList), max(xList)
             ymin, ymax = min(yList), max(yList)
             bbox = xmin, ymin, xmax, ymax
@@ -83,6 +100,7 @@ class HandTrackingDynamic:
             if draw:
                 cv2.rectangle(frame, (xmin - 20, ymin - 20), (xmax + 20, ymax + 20), (0, 255 , 0), 2)
                 # draw a green rectangle that is 20 pixels larger than the hand in all four directions. 
+                    #No need to flip values in xList and yList for rectangle, works as is. 
 
         return self.lmsList, bbox
     
@@ -92,22 +110,30 @@ class HandTrackingDynamic:
         x1 , y1 = self.lmsList[p1][1:3]
         #Assigns the x and y coords of the first target landmart to x1 and y1. 
         x2, y2 = self.lmsList[p2][1:3]
-        #Assigns the x and y coords of the second  target landmart to x2 and y4. 
+        #Assigns the x and y coords of the second  target landmart to x2 and y2. 
+        xDist, yDist = (x2-x1), (y2-y1)
+        #assigns the difference between x and y coords to xDist and yDist, respectively. 
         xMid , yMid = (x1+x2)//2 , (y1 + y2)//2
         #Finds midpoint components. 
+        
+        print(x1, x2, xDist,y1, y2, yDist)
+
+        drawY1, drawY2 = self.lmsList[p1][3], self.lmsList[p2][3]
+        drawYMid= (drawY1 + drawY2)//2
 
         if draw:
-              cv2.line(frame,(x1, y1),(x2,y2) ,(50,255,50), t)
+              cv2.line(frame,(x1, drawY1),(x2, drawY2) ,(50,255,50), t)
                 #Draws line between target landmarks.
-              cv2.circle(frame,(x1,y1),r,(255,0,135),cv2.FILLED)
-              cv2.circle(frame,(x2,y2),r, (255,0,135),cv2.FILLED)
-              cv2.circle(frame,(xMid,yMid), int(r*0.65) ,(255,0,135),cv2.FILLED)
+              cv2.circle(frame,(x1, drawY1),r,(255,0,135),cv2.FILLED)
+              cv2.circle(frame,(x2, drawY2),r, (255,0,135),cv2.FILLED)
+              cv2.circle(frame,(xMid,drawYMid), int(r*0.65) ,(255,0,135),cv2.FILLED)
                 #Draws circles on each target landmark + midpoint. Made midpoint circle smaller. 
                     #74,26,181 is a rose red color in case you want to use that. 
-        len= math.hypot(x2-x1,y2-y1)
-            #finds distance between target landmarks. 
+        
+        absoluteDist = math.hypot(xDist,yDist)
+            #finds absolute value of distance between target landmarks. 
 
-        return len, [x1, y1, x2, y2, xMid, yMid]
+        return absoluteDist, [x1, y1, x2, y2, xMid, yMid]
     
     def findUprightness(self):
 
@@ -119,7 +145,7 @@ class HandTrackingDynamic:
     def findFingerUp(self):
         fingers=[]
 
-        if self.lmsList[self.tipIds[0]][1] > self.lmsList[self.tipIds[0]-2][1]:
+        if self.lmsList[self.tipIds[0]][1] < self.lmsList[self.tipIds[0]-2][1]:
                 # Checks whether the thumb tip is to the right (for left-hand tracking) compared to the preceding joint.
                 # This is necessary because the thumb bends sideways (unlike the other fingers, which bend vertically).
                 #NEED TO DEVELOP A WAY TO DISTINGUISH RIGHT FROM LEFT, CAUSE THIS DOESN'T WORK OTHERSWISE. 
@@ -129,7 +155,7 @@ class HandTrackingDynamic:
             fingers.append(0)
 
         for id in range(1, 5):            
-            if self.lmsList[self.tipIds[id]][2] < self.lmsList[self.tipIds[id]-3][2]:
+            if self.lmsList[self.tipIds[id]][2] > self.lmsList[self.tipIds[id]-3][2]:
                 #The other four fingers (index, middle, ring, pinky) bend vertically, so their conditions compare y-coordinates instead of x-coordinates.
                 #Here, 2 represents the y-coordinate. If the fingertip’s y-coordinate is smaller (higher up), it means the finger is extended.
                    fingers.append(1)
@@ -167,8 +193,10 @@ def main():
         
         ctime=0
         ptime=0
+        
         cap = cv2.VideoCapture(0)
         #Takes video input from the first deteted camera. 
+        
         detector = HandTrackingDynamic()
             # This declares detector to be an object of the HandTrackingDyanmic class, which gives it access to all the functions (methods) above.
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -180,14 +208,19 @@ def main():
 
         while True:
             ret, frame = cap.read()
+                #take camera input
 
+            frame = detector.processAndCorrectView(frame)
+                #process camera input and flip view
             frame = detector.drawHandLandmarks(frame)
+                #draw intial landmark drawings
             lmsList = detector.findPosition(frame)
+                #Determine pixel positions and do secondary landmark drawing. 
             if len(lmsList[0]) != 0:
                 # This if statement is necessary because without it, the program kills itself when your hand isn't on screen lol. 
                 fingers, handMsg, handClosed = detector.findFingerUp()
                 distance, info = detector.findDistanceXY(4, 8, frame)
-                print("Fingers Up: ", fingers, (sum(fingers[0:5])), "  ", distance)
+                #print("Fingers Up: ", fingers, (sum(fingers[0:5])), "  ", distance)
                     # Output finger states to console
                 
                 cv2.putText(frame, ("Hand is " + handMsg), (5,80), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
@@ -216,6 +249,8 @@ def main():
  
             #gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 #Creates a greyscale version of the camera output. It doesn't get used. 
+            
+           
             cv2.imshow('Hand Movement Interpreter', frame)
                 #Opens a window with the name Hand Movement Interpreter and displays the result of running the above code on the camera input. 
 

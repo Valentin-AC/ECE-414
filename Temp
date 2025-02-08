@@ -5,3 +5,21 @@ wrist1 = detected_image.multi_hand_landmarks[1].
                     lm_dict["landmark_{0}_y".format(landmark)] = lm_list[landmark].y
                     lm_dict["landmark_{0}_z".format(landmark)] = lm_list[landmark].z
                     #does the same as first one, but adding in each of the individual components. 
+
+  
+                #Flips the y axis to go from bottom to top as described earlier, causing (0,0) to be at the bottom right.
+                self.lmsList[(self.lmsList.index(cy))] = h - cy
+
+                del self.lmsList[2:]
+                cy = int(h - (lm.y * h))
+                z = int(lm.z)
+                self.lmsList.append([cy, z])
+
+        if self.results.multi_hand_landmarks: 
+            # if there is a hand on screen, then...
+            for handLms in self.results.multi_hand_landmarks:
+                # for each each set of landmark lists corresponding to each detected hand...
+                    for lm in handLms.landmark:
+                        asdf = 1 - lm.y
+                        lm.y = asdf
+                             #Flips the y axis to go from bottom to top as described earlier, causing (0,0) to be at the bottom left.
