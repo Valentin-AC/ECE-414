@@ -53,7 +53,7 @@ class HandTrackingDynamic:
 
         return frame
 
-    def findPosition( self, frame, handNo=0, draw=True):
+    def findAndMark_Positions( self, frame, handNo=0, draw=True):
         xList = []
         yList = []
         zList = []
@@ -78,71 +78,71 @@ class HandTrackingDynamic:
                 yList.append(cy)
                 zList.append(z)
 
-                cDrawY = cy
+                cyDraw = cy
                 #Defines seperate y coordinates specifically for drawing because the flip applied below flips the orientation of drawings.
 
                 cy = int((1 - lm.y) * h) 
                 #Flips the y axis to go from bottom to top as described earlier, causing (0,0) to be at the bottom right.
-                self.lmsList.append([id, cx, cy, z, cDrawY])
+                self.lmsList.append([id, cx, cy, z, cyDraw])
 
                 
-
                 if draw:
                     # As shown in paramater declaration above, by default, draw = true. 
-                    cv2.circle(frame,  (cx, cDrawY), 5, (255, 0, 255), cv2.FILLED)
+                    cv2.circle(frame,  (cx, cyDraw), 5, (255, 0, 255), cv2.FILLED)
                         # Draw purple circles on each landmark, overtop the normal red ones.
                 
             xmin, xmax = min(xList), max(xList)
             ymin, ymax = min(yList), max(yList)
             bbox = xmin, ymin, xmax, ymax
+                #No need to flip values in xList and yList for rectangle, works as is. 
+
                 #print( "Hands Keypoint")
                 #print(bbox)
             if draw:
                 cv2.rectangle(frame, (xmin - 20, ymin - 20), (xmax + 20, ymax + 20), (0, 255 , 0), 2)
                 # draw a green rectangle that is 20 pixels larger than the hand in all four directions. 
-                    #No need to flip values in xList and yList for rectangle, works as is. 
+                
 
         return self.lmsList, bbox
     
 
-    def findDistanceXY(self, p1, p2, frame, draw= True, r=5, t=3):
+    def findAndMark_XYDistanceAndUprightness(self, p1, p2, frame, draw= True, r=5, t=3):
          
         x1 , y1 = self.lmsList[p1][1:3]
-        #Assigns the x and y coords of the first target landmart to x1 and y1. 
+            #Assigns the x and y coords of the first target landmart to x1 and y1. 
         x2, y2 = self.lmsList[p2][1:3]
-        #Assigns the x and y coords of the second  target landmart to x2 and y2. 
+            #Assigns the x and y coords of the second  target landmart to x2 and y2. 
         xDist, yDist = (x2-x1), (y2-y1)
-        #assigns the difference between x and y coords to xDist and yDist, respectively. 
+            #assigns the difference between x and y coords to xDist and yDist, respectively. 
         xMid , yMid = (x1+x2)//2 , (y1 + y2)//2
-        #Finds midpoint components. 
-        
-        print(x1, x2, xDist,y1, y2, yDist)
+            #Finds midpoint components. 
+ 
+        absoluteDist = math.hypot(xDist,yDist)
+            #finds absolute value of distance between target landmarks.
 
-        drawY1, drawY2 = self.lmsList[p1][3], self.lmsList[p2][3]
-        drawYMid= (drawY1 + drawY2)//2
+        angle = math.atan2(yDist, xDist)
+            # Finds angle (in radians) between yDist and xDist vectors.
+        uprightness = math.sin(angle)
+            #Takes the sine of this angle to determine how upright the chosen section is. 
+        
+        #print(xDist, yDist, angle, uprightness)
+
+        y1Draw, y2Draw = self.lmsList[p1][4], self.lmsList[p2][4]
+        yMidDraw = (y1Draw + y2Draw)//2
 
         if draw:
-              cv2.line(frame,(x1, drawY1),(x2, drawY2) ,(50,255,50), t)
+              cv2.line(frame,(x1, y1Draw),(x2, y2Draw) ,(50,255,50), t)
                 #Draws line between target landmarks.
-              cv2.circle(frame,(x1, drawY1),r,(255,0,135),cv2.FILLED)
-              cv2.circle(frame,(x2, drawY2),r, (255,0,135),cv2.FILLED)
-              cv2.circle(frame,(xMid,drawYMid), int(r*0.65) ,(255,0,135),cv2.FILLED)
+              cv2.circle(frame,(x1, y1Draw),r,(255,0,135),cv2.FILLED)
+              cv2.circle(frame,(x2, y2Draw),r, (255,0,135),cv2.FILLED)
+              cv2.circle(frame,(xMid,yMidDraw ), int(r*0.65) ,(255,0,135),cv2.FILLED)
                 #Draws circles on each target landmark + midpoint. Made midpoint circle smaller. 
                     #74,26,181 is a rose red color in case you want to use that. 
-        
-        absoluteDist = math.hypot(xDist,yDist)
-            #finds absolute value of distance between target landmarks. 
 
-        return absoluteDist, [x1, y1, x2, y2, xMid, yMid]
+        return absoluteDist, uprightness, [x1, y1, x2, y2, xMid, yMid, xDist, yDist, angle]
+
     
-    def findUprightness(self):
-
-        if self.results.multi_hand_landmarks:
-            myHand = self.results.multi_hand_landmarks
-
-        return "test"
-    
-    def findFingerUp(self):
+    def findFingerUp(self,frame):
         fingers=[]
 
         if self.lmsList[self.tipIds[0]][1] < self.lmsList[self.tipIds[0]-2][1]:
@@ -154,19 +154,23 @@ class HandTrackingDynamic:
         else:
             fingers.append(0)
 
+
+        _ , handUprightness, _ = self.findAndMark_XYDistanceAndUprightness(0, 17, frame)
+        # Measures the verticality from the wrist to the base knuckle of the pinkie. 
+
+        if handUprightness > 0: 
+            handVerticalOrientation = 1
+        else: 
+            handVerticalOrientation = 0
+                # This if statement solves the issue of fingers being counted as down when the hand is upside down by making status dependent on the hand's vertical orientation. 
+                # Not a perfect solution, there is a range of hand movement where the hand is parallel to the table/ground where the program thinks it's closed by it's not. 
         for id in range(1, 5):            
-            if self.lmsList[self.tipIds[id]][2] > self.lmsList[self.tipIds[id]-3][2]:
+            if self.lmsList[self.tipIds[id]][2] > self.lmsList[self.tipIds[id]-2][2]:
                 #The other four fingers (index, middle, ring, pinky) bend vertically, so their conditions compare y-coordinates instead of x-coordinates.
-                #Here, 2 represents the y-coordinate. If the fingertip’s y-coordinate is smaller (higher up), it means the finger is extended.
-                   fingers.append(1)
+                #Here, 2 represents the y-coordinate. If the fingertip is higher or lower (depeding on handVerticalOrientation) than the landmark two knuckles below, it signfies whether or not the finger is up or down. 
+                   fingers.append(handVerticalOrientation)
             else:
-                   fingers.append(0)
-
-            # As of right now, this only works well when the hand is upright.
-            # When hand is downward, it registers fingers as up (instead of down) when hand is closed. 
-            # Will be fixed by "uprightness coeffecient" (to be made)
-
-            #Note to self: Include a larger implementation here that alters whether a finger is either 0 or 1 based on both it being up/down AND and "uprightness coeffecient".
+                   fingers.append(1-handVerticalOrientation)
 
         if sum(fingers[1:5]) == 0:
             handClosed = True
@@ -179,6 +183,7 @@ class HandTrackingDynamic:
                 handMsg = "partially open"
             else: 
                 handMsg = "open"
+            
             handClosed = False
             #regardless of how many fingers are up, if all four aren't down, the hand will be considered closed. 
         
@@ -214,21 +219,17 @@ def main():
                 #process camera input and flip view
             frame = detector.drawHandLandmarks(frame)
                 #draw intial landmark drawings
-            lmsList = detector.findPosition(frame)
+            lmsList = detector.findAndMark_Positions(frame)
                 #Determine pixel positions and do secondary landmark drawing. 
             if len(lmsList[0]) != 0:
                 # This if statement is necessary because without it, the program kills itself when your hand isn't on screen lol. 
-                fingers, handMsg, handClosed = detector.findFingerUp()
-                distance, info = detector.findDistanceXY(4, 8, frame)
-                #print("Fingers Up: ", fingers, (sum(fingers[0:5])), "  ", distance)
+                fingers, handMsg, handClosed = detector.findFingerUp(frame)
+                distance, uprightCoeffecient, info = detector.findAndMark_XYDistanceAndUprightness(0,17, frame)
+                print("Fingers Up: ", fingers, (sum(fingers[0:5])), "  ", distance, uprightCoeffecient)
                     # Output finger states to console
                 
                 cv2.putText(frame, ("Hand is " + handMsg), (5,80), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
                 #On-screen hand status. 
-
-            #frame = detector.findDistanceXY(1,2,frame)
-
-            #note that the findDistanceXY method are not used in the main function
             
             #if len(lmsList)!=0:
                 #print(lmsList[0])
