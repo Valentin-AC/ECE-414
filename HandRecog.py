@@ -271,6 +271,7 @@ def main():
                 
                 cv2.putText(frame, ("Hand is " + handMsg), (5,80), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
                 #On-screen hand status. 
+                cv2.putText(frame, ("Rotation coeffecient is " + rotation), (5,120), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
             
             #if len(lmsList)!=0:
                 #print(lmsList[0])
