@@ -106,7 +106,7 @@ class HandTrackingDynamic:
         return self.lmsList, bbox
     
 
-    def findAndMark_XYDistanceAndUprightness(self, p1, p2, frame, draw= True, r=5, t=3):
+    def findAndMark_XYDistanceAndOrientation(self, p1, p2, frame, draw= True, r=5, t=3):
          
         x1 , y1 = self.lmsList[p1][1:3]
             #Assigns the x and y coords of the first target landmart to x1 and y1. 
@@ -124,6 +124,9 @@ class HandTrackingDynamic:
             # Finds angle (in radians) between yDist and xDist vectors.
         uprightness = math.sin(angle)
             #Takes the sine of this angle to determine how upright the chosen section is. 
+        horizontalness = math.cos(angle)
+            #Takes the cosine of this angle to determine an horizontal orientation coeffecient for the chosen section. 
+
         
         #print(xDist, yDist, angle, uprightness)
 
@@ -132,66 +135,101 @@ class HandTrackingDynamic:
 
         if draw:
               cv2.line(frame,(x1, y1Draw),(x2, y2Draw) ,(50,255,50), t)
-                #Draws line between target landmarks.
+                    #Draws line between target landmarks.
               cv2.circle(frame,(x1, y1Draw),r,(255,0,135),cv2.FILLED)
               cv2.circle(frame,(x2, y2Draw),r, (255,0,135),cv2.FILLED)
               cv2.circle(frame,(xMid,yMidDraw ), int(r*0.65) ,(255,0,135),cv2.FILLED)
-                #Draws circles on each target landmark + midpoint. Made midpoint circle smaller. 
+                    # Draws circles on each target landmark + midpoint. Made midpoint circle smaller. 
                     #74,26,181 is a rose red color in case you want to use that. 
 
-        return absoluteDist, uprightness, [x1, y1, x2, y2, xMid, yMid, xDist, yDist, angle]
+        return absoluteDist, horizontalness, uprightness, [x1, y1, x2, y2, xMid, yMid, xDist, yDist, angle]
 
     
     def findFingerUp(self,frame):
         fingers=[]
 
+        _, handhorizontalness, _, _ = self.findAndMark_XYDistanceAndOrientation(1, 0 , frame)
+
+        if handhorizontalness > 0: 
+            thumbOnLeft = True
+            thumbDefault = 1
+        else: 
+            thumbOnLeft = False
+            thumbDefault = 0
+            #This if statement solves the issue of not being able to distinguish between left and right hand being up as well as if a hand is flipped. 
+
         if self.lmsList[self.tipIds[0]][1] < self.lmsList[self.tipIds[0]-2][1]:
                 # Checks whether the thumb tip is to the right (for left-hand tracking) compared to the preceding joint.
                 # This is necessary because the thumb bends sideways (unlike the other fingers, which bend vertically).
-                #NEED TO DEVELOP A WAY TO DISTINGUISH RIGHT FROM LEFT, CAUSE THIS DOESN'T WORK OTHERSWISE. 
-            fingers.append(1)
+            fingers.append(thumbDefault)
                 #Append 1 to the list of fingers up. 
         else:
-            fingers.append(0)
+            fingers.append(1-thumbDefault)
 
-
-        _ , handUprightness, _ = self.findAndMark_XYDistanceAndUprightness(0, 17, frame)
-        # Measures the verticality from the wrist to the base knuckle of the pinkie. 
+        _, _, handUprightness, _ = self.findAndMark_XYDistanceAndOrientation(0, 10, frame)
+            # Measures the verticality from the wrist to the first knuckle of the middle finger. 
 
         if handUprightness > 0: 
-            handVerticalOrientation = 1
+            handIsUpright = True
+            fingerDefault = 1
         else: 
-            handVerticalOrientation = 0
+            handIsUpright = False
+            fingerDefault = 0
                 # This if statement solves the issue of fingers being counted as down when the hand is upside down by making status dependent on the hand's vertical orientation. 
                 # Not a perfect solution, there is a range of hand movement where the hand is parallel to the table/ground where the program thinks it's closed by it's not. 
+        
         for id in range(1, 5):            
             if self.lmsList[self.tipIds[id]][2] > self.lmsList[self.tipIds[id]-2][2]:
                 #The other four fingers (index, middle, ring, pinky) bend vertically, so their conditions compare y-coordinates instead of x-coordinates.
-                #Here, 2 represents the y-coordinate. If the fingertip is higher or lower (depeding on handVerticalOrientation) than the landmark two knuckles below, it signfies whether or not the finger is up or down. 
-                   fingers.append(handVerticalOrientation)
+                #Here, 2 represents the y-coordinate. If the fingertip is higher or lower (depeding on handIsUpright) than the landmark two knuckles below, it signfies whether or not the finger is up or down. 
+                   fingers.append(fingerDefault)
             else:
-                   fingers.append(1-handVerticalOrientation)
+                   fingers.append(1-fingerDefault)
 
         if sum(fingers[1:5]) == 0:
-            handClosed = True
+            handisClosed = True
             handMsg = "closed"
-            #Regardless of thumb, if the four fingers of a hand are down, hand is closed. 
-            #Remember, count starts from 0. 
-            #Also, remember that index ranges are exclusive on the end index. 
+                #Regardless of thumb, if the four fingers of a hand are down, hand is closed. 
+                #Remember, count starts from 0. 
+                #Also, remember that index ranges are exclusive on the end index. 
         else: 
             if 0 < sum(fingers[0:5]) < 5:
                 handMsg = "partially open"
             else: 
                 handMsg = "open"
             
-            handClosed = False
-            #regardless of how many fingers are up, if all four aren't down, the hand will be considered closed. 
+            handisClosed = False
+                #regardless of how many fingers are up, if all four aren't down, the hand will be considered closed. 
         
-        return fingers, handMsg, handClosed
+        return fingers, handMsg, handisClosed, handIsUpright, thumbOnLeft
 
-    def rotation(): 
-         
-        return "test"
+
+    def findRotation(self, frame): 
+        
+        zPointerBaseKnuckle, zPinkieBaseKnuckle = self.lmsList[5][3], self.lmsList[17][3]
+        Dist, _, _, _ = self.findAndMark_XYDistanceAndOrientation(5, 17, frame)
+            # Retrieves information about z coords of target knuckles as well as distance in between.
+        _, _, _, handIsUpright, thumbOnLeft = self.findFingerUp(frame)
+
+        maxDistance = 100
+        if Dist > maxDistance: 
+              maxDistance = Dist
+                # If absolute distance ever grows larger than any point in the past during the current instance, maxDistance is updated.
+            # A starting value of 100 pixels is used to prevent from very small movements before the max distance value becomes accurate from heavily influence rotation. It's a buffer value. 
+
+        unsignedRotation = Dist/maxDistance
+            # This statement inherently makes it so that the neutral position is when both the palm and back of the hand are facing perpendicaular to the camerage.
+            # In this position, the pinkie is in front of all the other fingers (from the POV of the camera) and Dist ~= 0. 
+            # By dividing by maxDistance, unsighnedRotion will never be over 1 
+
+        if thumbOnLeft:
+            rotation =  unsignedRotation 
+        else: 
+            rotation = unsignedRotation * -1
+                #If the thumb is on the left, the rotation value will cause counterclockwise (positive) rotaiton. If not, counter-clockwise (negative) rotation will occur. 
+
+        return rotation
+
 
 
 def main():
@@ -223,10 +261,13 @@ def main():
                 #Determine pixel positions and do secondary landmark drawing. 
             if len(lmsList[0]) != 0:
                 # This if statement is necessary because without it, the program kills itself when your hand isn't on screen lol. 
-                fingers, handMsg, handClosed = detector.findFingerUp(frame)
-                distance, uprightCoeffecient, info = detector.findAndMark_XYDistanceAndUprightness(0,17, frame)
-                print("Fingers Up: ", fingers, (sum(fingers[0:5])), "  ", distance, uprightCoeffecient)
-                    # Output finger states to console
+                fingers, handMsg, _, _, _ = detector.findFingerUp(frame)
+                distance, handHorizontalness, handUprightness, info = detector.findAndMark_XYDistanceAndOrientation(0,10, frame)
+                rotation = detector.findRotation(frame)
+
+
+                print("Fingers Up: ", fingers, (sum(fingers[0:5])), "  ", distance, handHorizontalness, handUprightness, rotation)
+                    # Output finger states and other info to console
                 
                 cv2.putText(frame, ("Hand is " + handMsg), (5,80), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
                 #On-screen hand status. 
