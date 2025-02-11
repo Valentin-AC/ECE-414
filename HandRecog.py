@@ -145,7 +145,7 @@ class HandTrackingDynamic:
         return absoluteDist, horizontalness, uprightness, [x1, y1, x2, y2, xMid, yMid, xDist, yDist, angle]
 
     
-    def findFingerUp(self,frame):
+    def findFingersOpen(self,frame):
         fingers=[]
 
         _, handhorizontalness, _, _ = self.findAndMark_XYDistanceAndOrientation(1, 0 , frame)
@@ -207,20 +207,31 @@ class HandTrackingDynamic:
     def findRotation(self, frame): 
         
         zPointerBaseKnuckle, zPinkieBaseKnuckle = self.lmsList[5][3], self.lmsList[17][3]
-        Dist, _, _, _ = self.findAndMark_XYDistanceAndOrientation(5, 17, frame)
+        dist, _, _, _ = self.findAndMark_XYDistanceAndOrientation(5, 17, frame)
             # Retrieves information about z coords of target knuckles as well as distance in between.
-        _, _, _, handIsUpright, thumbOnLeft = self.findFingerUp(frame)
+        _, _, _, _, thumbOnLeft = self.findFingersOpen(frame)
+
+        bufferAndScalingFactor = 0.5
+            #A value from 0-1 which determines how much the hand needs to be rotated from the starting position to activate rotation tracking and also how senstive the rotation is past this buffer point.
 
         maxDistance = 100
-        if Dist > maxDistance: 
-              maxDistance = Dist
+        if dist > maxDistance: 
+              maxDistance = dist
                 # If absolute distance ever grows larger than any point in the past during the current instance, maxDistance is updated.
             # A starting value of 100 pixels is used to prevent from very small movements before the max distance value becomes accurate from heavily influence rotation. It's a buffer value. 
 
-        unsignedRotation = Dist/maxDistance
+        unbufferedRotation = dist/maxDistance
             # This statement inherently makes it so that the neutral position is when both the palm and back of the hand are facing perpendicaular to the camerage.
             # In this position, the pinkie is in front of all the other fingers (from the POV of the camera) and Dist ~= 0. 
             # By dividing by maxDistance, unsighnedRotion will never be over 1 
+
+        if dist > bufferAndScalingFactor* maxDistance:
+            unsignedRotation = (unbufferedRotation/bufferAndScalingFactor) - bufferAndScalingFactor
+                # Unsimplified, this value is ((dist/bufferAndScalingFactor)-(bufferAndScalingFactor*maxDistance)/maxDistance since this adjusts when rotation actually starts to get counted so its still in the 0-1 range. 
+                # Seperating the terms and factoring out maxDistance on the second term results in unbufferedRotation - bufferAndScalingFactor.
+        else: 
+            unsignedRotation= 0
+                # If the handrotation is higher than the buffer value, then the temporary value of unsignedRotation kicks in and is scaled by the buffer factor to make up for not kicking in until reaching buffer point.  
 
         if thumbOnLeft:
             rotation =  unsignedRotation 
@@ -261,17 +272,17 @@ def main():
                 #Determine pixel positions and do secondary landmark drawing. 
             if len(lmsList[0]) != 0:
                 # This if statement is necessary because without it, the program kills itself when your hand isn't on screen lol. 
-                fingers, handMsg, _, _, _ = detector.findFingerUp(frame)
+                fingers, handMsg, _, _, _ = detector.findFingersOpen(frame)
                 distance, handHorizontalness, handUprightness, info = detector.findAndMark_XYDistanceAndOrientation(0,10, frame)
                 rotation = detector.findRotation(frame)
 
 
-                print("Fingers Up: ", fingers, (sum(fingers[0:5])), "  ", distance, handHorizontalness, handUprightness, rotation)
+                print("Fingers Open: ", fingers, (sum(fingers[0:5])), "  ", distance, handHorizontalness, handUprightness, rotation)
                     # Output finger states and other info to console
                 
                 cv2.putText(frame, ("Hand is " + handMsg), (5,80), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
                 #On-screen hand status. 
-                cv2.putText(frame, ("Rotation coeffecient is " + rotation), (5,120), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
+                cv2.putText(frame, ("Rotation coeffecient is " + str(rotation)), (5,120), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
             
             #if len(lmsList)!=0:
                 #print(lmsList[0])
