@@ -70,7 +70,7 @@ class HandTrackingDynamic:
                 cx, cy = int(lm.x * w), int(lm.y * h)
                     # the range of the coordinate values of each landmark gets converted into the possible range of pixel values instead of the arbitrary 0-1 range. 
                 
-                z = int(lm.z)
+                z = lm.z
                     # There is no corresponding pixels for z motion, so range stays the default. 
                     # This may change once second camera is implemented. 
 
@@ -106,7 +106,34 @@ class HandTrackingDynamic:
         return self.lmsList, bbox
     
 
-    def findAndMark_XYDistanceAndOrientation(self, p1, p2, frame, draw= True, r=5, t=3):
+    def drawMarkers(self, p1, p2, color, frame, r=5, t=3):
+
+        if color == "red":
+            lineColor = (74,26,200)
+            dotColor = (37,13,100)
+        elif color == "green": 
+            lineColor = (50,255,50)
+            dotColor = (25,120,25)
+
+        x1, x2 = self.lmsList[p1][1], self.lmsList[p2][1]
+            #Assigns the x coords of the first and second target landmart to x1 and x2, respectively.
+        xMid = (x1+x2)//2  
+
+        y1Draw, y2Draw = self.lmsList[p1][4], self.lmsList[p2][4]
+        yMidDraw = (y1Draw + y2Draw)//2
+
+        cv2.line(frame,(x1, y1Draw),(x2, y2Draw) ,(lineColor), t)
+            # Draws line between target landmark in bright color.
+        cv2.circle(frame,(x1, y1Draw),r,(dotColor),cv2.FILLED)
+        cv2.circle(frame,(x2, y2Draw),r, (dotColor),cv2.FILLED)
+        cv2.circle(frame,(xMid,yMidDraw ), int(r*0.65) ,(dotColor),cv2.FILLED)
+            # Draws dark colored circles on each target landmark + midpoint. Made midpoint circle smaller. 
+            # 74,26,200 is a bright rose red color in case you want to use that.
+
+        return frame
+
+
+    def findAndMark_XYDistanceAndOrientation(self, p1, p2, frame):
          
         x1 , y1 = self.lmsList[p1][1:3]
             #Assigns the x and y coords of the first target landmart to x1 and y1. 
@@ -126,22 +153,9 @@ class HandTrackingDynamic:
             #Takes the sine of this angle to determine how upright the chosen section is. 
         horizontalness = math.cos(angle)
             #Takes the cosine of this angle to determine an horizontal orientation coeffecient for the chosen section. 
-
         
-        #print(xDist, yDist, angle, uprightness)
-
-        y1Draw, y2Draw = self.lmsList[p1][4], self.lmsList[p2][4]
-        yMidDraw = (y1Draw + y2Draw)//2
-
-        if draw:
-              cv2.line(frame,(x1, y1Draw),(x2, y2Draw) ,(50,255,50), t)
-                    #Draws line between target landmarks.
-              cv2.circle(frame,(x1, y1Draw),r,(255,0,135),cv2.FILLED)
-              cv2.circle(frame,(x2, y2Draw),r, (255,0,135),cv2.FILLED)
-              cv2.circle(frame,(xMid,yMidDraw ), int(r*0.65) ,(255,0,135),cv2.FILLED)
-                    # Draws circles on each target landmark + midpoint. Made midpoint circle smaller. 
-                    #74,26,181 is a rose red color in case you want to use that. 
-
+        #print(xDist, yDist, angle, uprightness) 
+        
         return absoluteDist, horizontalness, uprightness, [x1, y1, x2, y2, xMid, yMid, xDist, yDist, angle]
 
     
@@ -149,6 +163,8 @@ class HandTrackingDynamic:
         fingers=[]
 
         _, handhorizontalness, _, _ = self.findAndMark_XYDistanceAndOrientation(1, 0 , frame)
+            # Measures the horizontalness from the wrist to the first landmark along the thumb. 
+        frame = self.drawMarkers(1, 0, "green", frame)
 
         if handhorizontalness > 0: 
             thumbOnLeft = True
@@ -168,6 +184,7 @@ class HandTrackingDynamic:
 
         _, _, handUprightness, _ = self.findAndMark_XYDistanceAndOrientation(0, 10, frame)
             # Measures the verticality from the wrist to the first knuckle of the middle finger. 
+        frame = self.drawMarkers(0, 10, "green", frame)
 
         if handUprightness > 0: 
             handIsUpright = True
@@ -210,25 +227,28 @@ class HandTrackingDynamic:
         dist, _, _, _ = self.findAndMark_XYDistanceAndOrientation(5, 17, frame)
             # Retrieves information about z coords of target knuckles as well as distance in between.
         _, _, _, _, thumbOnLeft = self.findFingersOpen(frame)
+        frame = self.drawMarkers(5, 17, "red", frame)
 
         bufferAndScalingFactor = 0.5
             #A value from 0-1 which determines how much the hand needs to be rotated from the starting position to activate rotation tracking and also how senstive the rotation is past this buffer point.
-
-        maxDistance = 100
+        
+        global maxDistance
+        maxDistance = 150
         if dist > maxDistance: 
               maxDistance = dist
                 # If absolute distance ever grows larger than any point in the past during the current instance, maxDistance is updated.
-            # A starting value of 100 pixels is used to prevent from very small movements before the max distance value becomes accurate from heavily influence rotation. It's a buffer value. 
+            # A starting value of 150 pixels is used to prevent from very small movements before the max distance value becomes accurate from heavily influence rotation. It's a buffer value. 
+        #Even with the global variable, the max Dist values is always the intial assignment until dist grows larger. It doesn't stick once pushed higher, not sure why. 
 
         unbufferedRotation = dist/maxDistance
             # This statement inherently makes it so that the neutral position is when both the palm and back of the hand are facing perpendicaular to the camerage.
             # In this position, the pinkie is in front of all the other fingers (from the POV of the camera) and Dist ~= 0. 
             # By dividing by maxDistance, unsighnedRotion will never be over 1 
 
-        if dist > bufferAndScalingFactor* maxDistance:
-            unsignedRotation = (unbufferedRotation/bufferAndScalingFactor) - bufferAndScalingFactor
-                # Unsimplified, this value is ((dist/bufferAndScalingFactor)-(bufferAndScalingFactor*maxDistance)/maxDistance since this adjusts when rotation actually starts to get counted so its still in the 0-1 range. 
-                # Seperating the terms and factoring out maxDistance on the second term results in unbufferedRotation - bufferAndScalingFactor.
+        if unbufferedRotation > bufferAndScalingFactor:
+            unsignedRotation = ((unbufferedRotation/bufferAndScalingFactor) - 1)
+                # Unsimplified, this value is ((unbufferedRotation- bufferAndScalingFactor)/bufferAndScalingFactor) since this adjusts when rotation actually starts to get counted so its still in the 0-1 range. 
+                # Seperating the terms and factoring out maxDistance on the second term results in unbufferedRotation/bufferAndScalingFactor - 1.
         else: 
             unsignedRotation= 0
                 # If the handrotation is higher than the buffer value, then the temporary value of unsignedRotation kicks in and is scaled by the buffer factor to make up for not kicking in until reaching buffer point.  
@@ -239,15 +259,16 @@ class HandTrackingDynamic:
             rotation = unsignedRotation * -1
                 #If the thumb is on the left, the rotation value will cause counterclockwise (positive) rotaiton. If not, counter-clockwise (negative) rotation will occur. 
 
-        return rotation
+        return rotation, maxDistance
 
 
 
 def main():
         
-        ctime=0
-        ptime=0
-        
+        ctime = 0
+        ptime = 0
+        #Setting values for important variables for later. 
+
         cap = cv2.VideoCapture(0)
         #Takes video input from the first deteted camera. 
         
@@ -273,15 +294,16 @@ def main():
             if len(lmsList[0]) != 0:
                 # This if statement is necessary because without it, the program kills itself when your hand isn't on screen lol. 
                 fingers, handMsg, _, _, _ = detector.findFingersOpen(frame)
-                distance, handHorizontalness, handUprightness, info = detector.findAndMark_XYDistanceAndOrientation(0,10, frame)
-                rotation = detector.findRotation(frame)
+                verticalDistance, handHorizontalness, handUprightness, info = detector.findAndMark_XYDistanceAndOrientation(0,10, frame)
+                horizontalDistance, _, _, _ = detector.findAndMark_XYDistanceAndOrientation(5, 17, frame)
+                rotation, maxDistance = detector.findRotation(frame)
 
-
-                print("Fingers Open: ", fingers, (sum(fingers[0:5])), "  ", distance, handHorizontalness, handUprightness, rotation)
+                print(detector.lmsList[0][3]*3.5e5)
+                #print("Fingers Open: ", fingers, (sum(fingers[0:5])), "  ", verticalDistance, handHorizontalness, handUprightness, horizontalDistance, maxDistance, rotation)
                     # Output finger states and other info to console
                 
                 cv2.putText(frame, ("Hand is " + handMsg), (5,80), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
-                #On-screen hand status. 
+                    #On-screen hand status. 
                 cv2.putText(frame, ("Rotation coeffecient is " + str(rotation)), (5,120), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,255), 2)
             
             #if len(lmsList)!=0:
