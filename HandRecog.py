@@ -337,7 +337,7 @@ class HandTrackingDynamic:
                 #If its downwards, forward tilt continues getting higher the more and more the middle finger base knuckle passes the wrist. 
 
         if (unbufferedForwardTilt > forwardBufferAndScalingFactor) and handIsUpright:
-            unsignedForwardTilt = ((unbufferedForwardTilt- forwardBufferAndScalingFactor)/(1 - forwardBufferAndScalingFactor)) * 1.1
+            unsignedForwardTilt = ((unbufferedForwardTilt- forwardBufferAndScalingFactor)/(1 - forwardBufferAndScalingFactor)) * 1.5
                 # This kicks in when tilt actually starts to get counted from the starting position only and scales it such that its still in the 0-1 range. 
         elif not(handIsUpright):
             unsignedForwardTilt = unbufferedForwardTilt * 1.5
