@@ -2,8 +2,6 @@ import cv2
 import mediapipe as mp
 import time
 import math as math
-import statistics as stat
-import os
 
 
 class HandTrackingDynamic:
@@ -80,6 +78,7 @@ class HandTrackingDynamic:
                 
                 cz = (2 * w) - (clamp(zScaled, 0, 1) * (2 * w))
                 #sets cz to pixel values by first ensuring the 0 - 1 range and then multiplying by twice the width of the screen, which is approximately the max distance from the screen the hand will relistically move away. 
+                #Also makes it such that cz increases with distance from the camera instead of decreasing. 
                 #Unlike cx and cy (below), cz is very much relative. Z will increase/decrease based on comparison to position of other landmarks, even if objective z location didnt change. 
 
                 cx, cy = int(lm.x * w), int(lm.y * h)
@@ -128,6 +127,15 @@ class HandTrackingDynamic:
         elif color == "blue": 
             lineColor = (200,74,26)
             dotColor = (100,37,13)
+        elif color == "magenta":
+            lineColor = (200,50,200)
+            dotColor = (100,25,100)
+        elif color == "cyan":
+            lineColor = (255,255,0)
+            dotColor = (125,125,0)
+        elif color == "yellow":
+            lineColor = (0,255,255)
+            dotColor = (0,125,125)
 
         x1, x2 = self.lmsList[p1][1], self.lmsList[p2][1]
             #Assigns the x coords of the first and second target landmart to x1 and x2, respectively.
@@ -147,7 +155,7 @@ class HandTrackingDynamic:
         return frame
 
 
-    def findDistanceAndOrientation(self, p1, p2, frame):
+    def defineDistanceAndOrientation(self, p1, p2):
          
         x1 , y1, z1 = self.lmsList[p1][1:4]
             #Assigns the x and y coords of the first target landmart to x1 and y1. 
@@ -162,6 +170,8 @@ class HandTrackingDynamic:
         absoluteDistXZ = math.hypot(xDist,zDist)
         absoluteDistZY = math.hypot(zDist,yDist)
             #finds absolute value of distance between target landmarks.
+
+        absoluteDist3D = math.hypot(xDist,yDist,zDist)
 
         angleXY = math.atan2(yDist, xDist)
         angleXZ = math.atan2(zDist, xDist)
@@ -180,90 +190,56 @@ class HandTrackingDynamic:
         
         #print(xDist, yDist, angle, uprightnessXY) 
         
-        return  [absoluteDistXY, absoluteDistXZ, absoluteDistZY], \
+        return  [absoluteDistXY, absoluteDistXZ, absoluteDistZY, absoluteDist3D], \
                 [horizontalnessXY, horizontalnessXZ, horizontalnessZY], \
                 [uprightnessXY,uprightnessXZ,uprightnessZY], \
                 [x1, y1, z1, x2, y2, z2, xMid, yMid, zMid, xDist, yDist, zDist, angleXY, angleXZ, angleZY]
                     #Explicit line breaks used to condense return statement. 
                     #Might need to create a graphic for XY, XZ and ZY at some point. 
 
-    
-    def findFingersOpen(self,frame):
-        fingers=[]
+    def findOrientation(self):
 
-        _, handHorizontalOrientation, _, _ = self.findDistanceAndOrientation(1, 0 , frame)
-            # Measures the horizontalnessXY from the wrist to the first landmark along the thumb. 
-        handHorizontalOrientationXY = handHorizontalOrientation[0]
-
-        frame = self.drawMarkers(1, 0, "green", frame)
+        _, handHorizontalOrientation, _, _ = self.defineDistanceAndOrientation(self.tipIds[0] - 3, 0)
+                # Measures the horizontalnessXY from the first landmark along the thumb to the wrist. 
+        handHorizontalOrientationXY = handHorizontalOrientation[0]    
 
         if handHorizontalOrientationXY > 0: 
             thumbOnLeft = True
-            thumbDefault = 1
         else: 
             thumbOnLeft = False
-            thumbDefault = 0
             #This if statement solves the issue of not being able to distinguish between left and right hand being up as well as if a hand is flipped. 
 
-        if self.lmsList[self.tipIds[0]][1] < self.lmsList[self.tipIds[0]-2][1]:
-                # Checks whether the thumb tip is to the right (for left-hand tracking) compared to the preceding joint.
-                # This is necessary because the thumb bends sideways (unlike the other fingers, which bend vertically).
-            fingers.append(thumbDefault)
-                #Append 1 to the list of fingers up. 
-        else:
-            fingers.append(1-thumbDefault)
-
-        _, _, handVerticalOrientation, _ = self.findDistanceAndOrientation(0, 10, frame)
+        _, _, handVerticalOrientation, _ = self.defineDistanceAndOrientation(0, self.tipIds[2] - 3)
             # Measures the verticality from the wrist to the first knuckle of the middle finger. 
         handVerticalOrientationXY = handVerticalOrientation[0]
 
-        frame = self.drawMarkers(0, 10, "green", frame)
-
         if handVerticalOrientationXY > 0: 
             handIsUpright = True
-            fingerDefault = 1
         else: 
             handIsUpright = False
-            fingerDefault = 0
-                # This if statement solves the issue of fingers being counted as down when the hand is upside down by making status dependent on the hand's vertical orientation. 
-                # Not a perfect solution, there is a range of hand movement where the hand is parallel to the table/ground where the program thinks it's closed by it's not. 
-        
-        for id in range(1, 5):            
-            if self.lmsList[self.tipIds[id]][2] > self.lmsList[self.tipIds[id]-2][2]:
-                #The other four fingers (index, middle, ring, pinky) bend vertically, so their conditions compare y-coordinates instead of x-coordinates.
-                #Here, 2 represents the y-coordinate. If the fingertip is higher or lower (depeding on handIsUpright) than the landmark two knuckles below, it signfies whether or not the finger is up or down. 
-                   fingers.append(fingerDefault)
-            else:
-                   fingers.append(1-fingerDefault)
 
-        if sum(fingers[1:5]) == 0:
-            handisClosed = True
-            handMsg = "closed"
-                #Regardless of thumb, if the four fingers of a hand are down, hand is closed. 
-                #Remember, count starts from 0. 
-                #Also, remember that index ranges are exclusive on the end index. 
-        else: 
-            if 0 < sum(fingers[0:5]) < 5:
-                handMsg = "partially open"
-            else: 
-                handMsg = "open"
-            
-            handisClosed = False
-                #regardless of how many fingers are up, if all four aren't down, the hand will be considered closed. 
-        
-        return fingers, handMsg, handisClosed, handIsUpright, thumbOnLeft
+        return handIsUpright, thumbOnLeft
+    
+    def markOrientation(self, frame): 
 
+        frame = self.drawMarkers(0, self.tipIds[2] - 3, "green", frame)
+            #Draw line from wrist to middle finger base. 
+        frame = self.drawMarkers(0, self.tipIds[0] - 3, "green", frame)
+            #Draw line from wrist to thumb base.
+
+        return frame 
+    
 
     def findRotation(self, frame): 
-        zPointerBaseKnuckle, zPinkieBaseKnuckle, zWrist= self.lmsList[5][3], self.lmsList[17][3], self.lmsList[0][3]
+        pointerBaseKnuckleZ, pinkieBaseKnuckleZ, WristZ = self.lmsList[self.tipIds[1] - 3][3], self.lmsList[self.tipIds[4] - 3][3], self.lmsList[0][3]
 
-        palmLength, _, _, _ = self.findDistanceAndOrientation(5, 17, frame)
+        palmLength, _, _, _ = self.defineDistanceAndOrientation(self.tipIds[1] - 3, self.tipIds[4] - 3)
         palmLengthXY = palmLength[0]
             # Retrieves information about z coords of target knuckles as well as distance in between.
-        _, _, _, _, thumbOnLeft = self.findFingersOpen(frame)
-        frame = self.drawMarkers(5, 17, "red", frame)
+        _, thumbOnLeft = self.findOrientation()
+        frame = self.drawMarkers(self.tipIds[1] - 3, self.tipIds[4] - 3, "red", frame)
 
-        bufferAndScalingFactor = 0.1
+        bufferAndScalingFactor = 0.05
             #A value from 0-1 which determines how much the hand needs to be rotated from the starting position to activate rotation tracking and also how senstive the rotation is past this buffer point.
         
         global maxPalmLength
@@ -286,11 +262,11 @@ class HandTrackingDynamic:
         else: 
             unsignedRotation= 0
 
-        #print(round(zPointerBaseKnuckle,4) , round(zPinkieBaseKnuckle,4) , round(zWrist,4))
+        #print(round(pointerBaseKnuckleZ,4) , round(pinkieBaseKnuckleZ,4) , round(WristZ,4))
 
-        if ((zPointerBaseKnuckle > zPinkieBaseKnuckle) and thumbOnLeft) or \
-           ((zPointerBaseKnuckle < zPinkieBaseKnuckle) and not(thumbOnLeft)):
-            rotation =  unsignedRotation * 1.3
+        if ((pointerBaseKnuckleZ > pinkieBaseKnuckleZ) and thumbOnLeft) or \
+           ((pointerBaseKnuckleZ < pinkieBaseKnuckleZ) and not(thumbOnLeft)):
+            rotation =  unsignedRotation * 1.5
         else: 
             rotation = unsignedRotation * -1 * 1.75
 
@@ -298,7 +274,8 @@ class HandTrackingDynamic:
                     #Statements have been made such that this behavior occurs regardless of hand being used. 
                     #Gave the negative hand movement an extra kick given how hard it is to move in that direction. 
 
-
+        rotation = max(min(1, rotation), -1)
+            #Clamps rotation to be in the 0 - 1 range. 
         rotation = round(rotation, 2)
             #Rounds off two 2 decimal points. 
 
@@ -306,18 +283,18 @@ class HandTrackingDynamic:
     
 
     def findTilt(self, frame):
-        zWrist, zMiddleFingerBaseKnuckle = self.lmsList[0][3], self.lmsList[9][3]
-        wristToMiddleFingerBaseKnuckleDist, wristToMiddleFingerBaseKnuckleHortizontalness, _, _ = self.findDistanceAndOrientation(0, 9, frame)
+        wristZ, middleFingerSecondKnuckleZ = self.lmsList[0][3], self.lmsList[self.tipIds[2] - 2][3]
+        wristToMiddleFingerSecondKnuckleDist, wristToMiddleFingerSecondKnuckleHortizontalness, _, _ = self.defineDistanceAndOrientation(0, 9)
             # Measures horizontalness from the wrist to the first landmark along the pointer finger.
             # Very similar approach to calculating rotation. 
             #SEE findRotation METHOD COMMENTS TO SEE EXPLANATION ON METHODS USED BELOW. 
         
-        wTMFBKDist = wristToMiddleFingerBaseKnuckleDist
-        wTMFBKHorizontalness = wristToMiddleFingerBaseKnuckleHortizontalness
+        wTMFBKDist = wristToMiddleFingerSecondKnuckleDist
+        wTMFBKHorizontalness = wristToMiddleFingerSecondKnuckleHortizontalness
         #Abbreviations cause normal names are massive
         
         wTMFBKDist_XY = wTMFBKDist[0]
-        _, _, _, handIsUpright, thumbOnLeft = self.findFingersOpen(frame)
+        handIsUpright, _ = self.findOrientation()
 
         forwardBufferAndScalingFactor = 0.3
         
@@ -337,22 +314,23 @@ class HandTrackingDynamic:
                 #If its downwards, forward tilt continues getting higher the more and more the middle finger base knuckle passes the wrist. 
 
         if (unbufferedForwardTilt > forwardBufferAndScalingFactor) and handIsUpright:
-            unsignedForwardTilt = ((unbufferedForwardTilt- forwardBufferAndScalingFactor)/(1 - forwardBufferAndScalingFactor)) * 1.5
+            unsignedForwardTilt = ((unbufferedForwardTilt- forwardBufferAndScalingFactor)/(1 - forwardBufferAndScalingFactor))
                 # This kicks in when tilt actually starts to get counted from the starting position only and scales it such that its still in the 0-1 range. 
         elif not(handIsUpright):
-            unsignedForwardTilt = unbufferedForwardTilt * 1.5
+            unsignedForwardTilt = unbufferedForwardTilt * 1.75
                 #Condition for when the hand is downward, when buffering isn't needed. 
         else: 
             unsignedForwardTilt= 0
 
-        if zMiddleFingerBaseKnuckle < zWrist:
+        if middleFingerSecondKnuckleZ < wristZ:
             forwardTilt = unsignedForwardTilt
         else:
             forwardTilt = unsignedForwardTilt * -1 * 1.5
                 #forwardTils is postive (forward) when middle finger base knuckle is in front of wrist. Otherwise, negative. 
                 #Given a little kick to make up for the lack of backwards mobility in the hand from starting position. 
 
-
+        forwardTilt = max(min(1, forwardTilt), -1)
+            #Clamps forwardTilt to be in the 0 - 1 range. 
         forwardTilt = round(forwardTilt, 2)
             #Rounds off two 2 decimal points. 
         
@@ -363,7 +341,7 @@ class HandTrackingDynamic:
         sidewaysTiltSign = unbufferedSidewaysTilt/abs(unbufferedSidewaysTilt)
             # The horizontalness attribute has sign built in, so we take it out and save it for later use. 
 
-        sidewaysBufferAndScalingFactor= 0.4
+        sidewaysBufferAndScalingFactor= 0.45
 
         if (abs(unbufferedSidewaysTilt) > sidewaysBufferAndScalingFactor):
             sidewaysTilt = ((abs(unbufferedSidewaysTilt)- sidewaysBufferAndScalingFactor)/(1 - sidewaysBufferAndScalingFactor)) * sidewaysTiltSign
@@ -374,14 +352,16 @@ class HandTrackingDynamic:
             sidewaysTilt = sidewaysTilt * 2
             #Add an extra kick to compensate for it being harder to sideways tilt to the right. 
         
+        sidewaysTilt = max(min(1, sidewaysTilt), -1)
+            #Clamps sidewaysTilt to be in the 0 - 1 range. 
         sidewaysTilt = round(sidewaysTilt, 4)
 
-        frame = self.drawMarkers(0, 9, "blue", frame)
+        frame = self.drawMarkers(0, self.tipIds[2] - 2, "blue", frame)
 
         return forwardTilt, sidewaysTilt
 
 
-    def findCenterOfMass(self):
+    def findAndMarkCenterOfMass(self, frame):
         
         def avgDimension(targetList,targetDimension):
             targetValues = []
@@ -402,19 +382,24 @@ class HandTrackingDynamic:
             average = int(sum/len(targetValues))
                 
             return average
-        
-        lmsList = self.lmsList
-        
-        centerOfMassWithFingersX = avgDimension(lmsList, "x")
-            #Average of x components for ALL landmarks.
-        centerOfMassWithFingersY = avgDimension(lmsList, "y")
-            #Average of Y components for ALL landmarks.
-        centerOfMassWithFingersZ = avgDimension(lmsList, "z")
-            #Average of z components for ALL landmarks.
-        centerOfMassWithFingers = [centerOfMassWithFingersX, centerOfMassWithFingersY, centerOfMassWithFingersZ]
+    
+        lastIDofLmsList = len(self.lmsList) - 1
+        nextLmsListIDAvailable = lastIDofLmsList + 1
+        #Identifies the next id available in the lmsList.
 
-        baseKnuckleList = lmsList[1:17:4]
-        baseKnuckleList.append(lmsList[0])
+        h, _, _ = frame.shape
+        
+        centerOfMassWithFingersX = avgDimension(self.lmsList, "x")
+            #Average of x components for ALL landmarks.
+        centerOfMassWithFingersY = avgDimension(self.lmsList, "y")
+            #Average of Y components for ALL landmarks.
+        centerOfMassWithFingersZ = avgDimension(self.lmsList, "z")
+            #Average of z components for ALL landmarks.
+        centerOfMassWithFingersYDraw = (h - centerOfMassWithFingersY)
+        centerOfMassWithFingers = [nextLmsListIDAvailable, centerOfMassWithFingersX, centerOfMassWithFingersY, centerOfMassWithFingersZ, centerOfMassWithFingersYDraw]
+
+        baseKnuckleList = self.lmsList[1:17:4]
+        baseKnuckleList.append(self.lmsList[0])
         completeNoFingersList = baseKnuckleList
 
         centerOfMassNoFingersX = avgDimension(completeNoFingersList, "x")
@@ -423,9 +408,95 @@ class HandTrackingDynamic:
             #Average of Y components for all base knuckle landmarks and wrist.
         centerOfMassNoFingersZ = avgDimension(completeNoFingersList, "z")
             #Average of Z components for all base knuckle landmarks and wrist.
-        centerOfMassNoFingers = [centerOfMassNoFingersX, centerOfMassNoFingersY, centerOfMassNoFingersZ]
+        centerOfMassNoFingersYDraw = (h - centerOfMassNoFingersY)
+        centerOfMassNoFingers = [nextLmsListIDAvailable + 1, centerOfMassNoFingersX, centerOfMassNoFingersY, centerOfMassNoFingersZ, centerOfMassNoFingersYDraw]
+        
+        self.lmsList.append(centerOfMassWithFingers)
+        self.lmsList.append(centerOfMassNoFingers)
+
+        frame = cv2.circle(frame, (centerOfMassWithFingersX, centerOfMassWithFingersYDraw), 5, (255,255,0), cv2.FILLED)
+        frame = cv2.circle(frame, (centerOfMassNoFingersX, centerOfMassNoFingersYDraw), 5, (0,255,255), cv2.FILLED)
+
+            #Adds the centers of mass to the lmsList as landmarks with ID 21 and 22.
+
+
+
+                #cy = int((1 - lm.y) * h) 
+                #cyDraw = cy
+                #Defines seperate y coordinates specifically for drawing because the flip applied below flips the orientation of drawings if used as is.
+
+                
+                #Flips the y axis to go from bottom to top as described earlier, causing (0,0) to be at the bottom right.
+                #self.lmsList.append([id, cx, cy, cz, cyDraw])
 
         return centerOfMassWithFingers, centerOfMassNoFingers
+
+
+    def findFingersOpen(self):
+        fingers=[]
+        handIsUpright, _ = self.findOrientation()
+        wristZ, middleFingerBaseKnuckleZ = self.lmsList[0][3], self.lmsList[self.tipIds[2] - 3][3]
+       
+        if handIsUpright:
+            centerOfMassttoThumbTipDistance, _ , _ , _ = self.defineDistanceAndOrientation(22, self.tipIds[0])
+            centerOfMassttoThumbComparisonKnuckleDistance, _ , _ , _ = self.defineDistanceAndOrientation(22, self.tipIds[0] - 2)
+                #When hand is upright, use center of mass with fingers as the point of comparison. 
+
+        else: 
+            centerOfMassttoThumbTipDistance, _ , _ , _ = self.defineDistanceAndOrientation(21, self.tipIds[0])
+            centerOfMassttoThumbComparisonKnuckleDistance, _ , _ , _ = self.defineDistanceAndOrientation(21, self.tipIds[0] - 1)    
+                #When the hand isn't upright, the detection works better when the point of comparison is center of mass without fingers. 
+
+        centerOfMassttoThumbTipDistanceXY = abs(centerOfMassttoThumbTipDistance[0])
+                #measures XY distance from center of mass to finger tip. 
+        centerOfMassttoThumbComparisonKnuckleDistanceXY = abs(centerOfMassttoThumbComparisonKnuckleDistance[0])
+                #measures XY distance from center of mass to landmark 1 step below thumb tip.
+            
+        if centerOfMassttoThumbComparisonKnuckleDistanceXY > centerOfMassttoThumbTipDistanceXY:
+                #The moment the finger tip to center of mass distance is smaller than the center of mass to second knuckle distance, finger is closed. 
+            fingers.append(0)
+        else:
+            fingers.append(1)
+
+        for id, _ in enumerate(self.tipIds[1:5]):
+            id += 1
+                #accounts for count starting at 0 instead of 1. 
+            if (handIsUpright and middleFingerBaseKnuckleZ > wristZ) or not(handIsUpright):
+                centerOfMassttoFingerTipDistance, _ , _ , _ = self.defineDistanceAndOrientation(22, self.tipIds[id])
+                centerOfMassttoFingerComparisonKnuckleDistance, _ , _ , _ = self.defineDistanceAndOrientation(22, self.tipIds[id] - 2)
+                    #When hand is upright and not forwared tilted OR downright, use center of mass (without fingers) VS. second knuckles as the point of comparison. 
+            else: 
+                centerOfMassttoFingerTipDistance, _ , _ , _ = self.defineDistanceAndOrientation(21, self.tipIds[id])
+                centerOfMassttoFingerComparisonKnuckleDistance, _ , _ , _ = self.defineDistanceAndOrientation(21, self.tipIds[id]  - 3)    
+                    #When the hand is upright and tilted forard, the detection works better when the point of comparison is center of mass (with fingers) VS. base kunckles. 
+
+            centerOfMassttoFingerTipDistanceXY = abs(centerOfMassttoFingerTipDistance[0])
+                    #measures XY distance from center of mass to finger tip. 
+            centerOfMassttoFingerComparisonKnuckleDistanceXY = abs(centerOfMassttoFingerComparisonKnuckleDistance[0])
+                    #measures XY distance from center of mass to landmark 1 step below thumb tip.
+             
+            if centerOfMassttoFingerComparisonKnuckleDistanceXY > centerOfMassttoFingerTipDistanceXY:
+                    #The moment the finger tip to center of mass distance is smaller than the center of mass to second knuckle distance, finger is closed. 
+                fingers.append(0)
+            else:
+                fingers.append(1)
+    
+        if sum(fingers[1:5]) == 0:
+            handisClosed = True
+            handMsg = "closed"
+                #Regardless of thumb, if the four fingers of a hand are down, hand is closed. 
+                #Remember, count starts from 0. 
+                #Also, remember that index ranges are exclusive on the end index. 
+        else: 
+            if 0 < sum(fingers[0:5]) < 5:
+                handMsg = "partially open"
+            else: 
+                handMsg = "open"
+            
+            handisClosed = False
+                #regardless of how many fingers are up, if all four aren't down, the hand will be considered not closed. 
+        
+        return fingers, handMsg, handisClosed
 
 
 def main():
@@ -471,14 +542,11 @@ def main():
 
             if len(lmsList[0]) != 0:
                 # This if statement is necessary because without it, the program kills itself when your hand isn't on screen lol. 
-                fingers, handMsg, _, _, _ = detector.findFingersOpen(frame)
-                verticalDistance, handHorizontalOrientation, handVerticalOrientation, info = detector.findDistanceAndOrientation(0,10, frame)
-                #need to access lists here. 
-                horizontalDistance, _, _, _ = detector.findDistanceAndOrientation(5, 17, frame)
-                #need to access lists here. 
-                rotation, maxDistance = detector.findRotation(frame)
+                frame = detector.markOrientation(frame)
+                rotation, _ = detector.findRotation(frame)
                 forwardTilt, sidewaysTilt = detector.findTilt(frame)
-                centerOfMassWithFingers, centerOfMassNoFingers = detector.findCenterOfMass()
+                centerOfMassWithFingers, centerOfMassNoFingers = detector.findAndMarkCenterOfMass(frame)
+                fingers, handMsg, _ = detector.findFingersOpen()
 
                 #print(detector.lmsList[0][3]*5e5)
                 #print("Fingers Open: ", fingers, (sum(fingers[0:5])), "  ", verticalDistance, handHorizontalOrientation, handVerticalOrientation, horizontalDistance, maxDistance, rotation)
@@ -489,8 +557,8 @@ def main():
                 cv2.putText(frame, ("Rotation: " + str(rotation)), (5,90), cv2.FONT_HERSHEY_PLAIN, fontSize, (0,255,0), fontThickness)
                 cv2.putText(frame, ("Forward Tilt: " + str(forwardTilt) + "  Sideways Tilt:" + str(sidewaysTilt)), (5,120), cv2.FONT_HERSHEY_PLAIN, fontSize, (0,255,0), fontThickness)
                 cv2.putText(frame, ("Center of Mass:"), (5,160), cv2.FONT_HERSHEY_PLAIN, fontSize, (0,255,0), fontThickness)
-                cv2.putText(frame, ("  With Fingers: " + str(centerOfMassWithFingers)), (5,190), cv2.FONT_HERSHEY_PLAIN, fontSize, (0,255,0), fontThickness)
-                cv2.putText(frame, ("  Without Fingers: " + str(centerOfMassNoFingers)), (5,220), cv2.FONT_HERSHEY_PLAIN, fontSize, (0,255,0), fontThickness)
+                cv2.putText(frame, ("  With Fingers: " + str(centerOfMassWithFingers[1:])), (5,190), cv2.FONT_HERSHEY_PLAIN, fontSize, (0,255,0), fontThickness)
+                cv2.putText(frame, ("  Without Fingers: " + str(centerOfMassNoFingers[1:])), (5,220), cv2.FONT_HERSHEY_PLAIN, fontSize, (0,255,0), fontThickness)
 
             else: 
                 cv2.putText(frame, ("Awaiting Hand..."), (5,70), cv2.FONT_HERSHEY_PLAIN, 2, (74,26,255), 2)
