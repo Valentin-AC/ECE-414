@@ -500,12 +500,13 @@ class HandTrackingDynamic:
 
     def completeInfo(self):
         landmarkCoordinates = self.lmsList
+        centerOfMassWithFingers, centerOfMassNoFingers = self.findAndMarkCenterOfMass()
         handIsUpright, thumbOnLeft = self.findOrientation()
         rotation, _ = self.findRotation()
         forwardTilt, sidewaysTilt = self.findTilt()
         fingers, handMsg, handisClosed = self.findFingersOpen()
 
-        return landmarkCoordinates, handIsUpright, thumbOnLeft, rotation, forwardTilt, sidewaysTilt, fingers, handMsg, handisClosed
+        return landmarkCoordinates, centerOfMassWithFingers, centerOfMassNoFingers, handIsUpright, thumbOnLeft, rotation, forwardTilt, sidewaysTilt, fingers, handMsg, handisClosed
     
 
 def main():
